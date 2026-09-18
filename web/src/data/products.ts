@@ -145,7 +145,7 @@ export const brand = {
   motto: 'Good Food, Better Tomorrow',
 }
 
-/** Merge API product pricing/stock with local gallery & ingredient content. */
+/** Merge API product data with local gallery & ingredient content. */
 export function enrichProduct(
   apiProduct: {
     id: string
@@ -162,27 +162,26 @@ export function enrichProduct(
   },
 ): Product {
   const local = products.find((p) => p.id === apiProduct.id)
-  if (!local) {
-    return {
-      ...apiProduct,
-      accent: (apiProduct.accent as Product['accent']) || 'gold',
-      gallery: {
-        product: apiProduct.image,
-        benefits: apiProduct.image,
-        ingredients: apiProduct.image,
-      },
-      ingredientsList: [],
-    }
-  }
+  const image = apiProduct.image || local?.image || '/images/product-panjeeri.png'
+  const accent = (apiProduct.accent as Product['accent']) || local?.accent || 'gold'
   return {
-    ...local,
-    name: apiProduct.name || local.name,
-    tagline: apiProduct.tagline || local.tagline,
-    description: local.description || apiProduct.description,
-    weight: apiProduct.weight || local.weight,
-    price: apiProduct.price ?? local.price,
-    currency: apiProduct.currency || local.currency,
-    benefits: local.benefits,
-    badges: local.badges,
+    id: apiProduct.id,
+    name: apiProduct.name || local?.name || '',
+    tagline: apiProduct.tagline || local?.tagline || '',
+    description: apiProduct.description || local?.description || '',
+    weight: apiProduct.weight || local?.weight || '500 g',
+    price: apiProduct.price ?? local?.price ?? 0,
+    currency: apiProduct.currency || local?.currency || 'PKR',
+    image,
+    benefits: apiProduct.benefits?.length ? apiProduct.benefits : local?.benefits || [],
+    badges: apiProduct.badges?.length ? apiProduct.badges : local?.badges || [],
+    accent,
+    gallery: {
+      product: image,
+      benefits: local?.gallery.benefits || image,
+      ingredients: local?.gallery.ingredients || image,
+    },
+    ingredientsList: local?.ingredientsList || [],
+    howTo: local?.howTo,
   }
 }

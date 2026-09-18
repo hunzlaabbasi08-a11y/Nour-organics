@@ -44,7 +44,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    throw new Error(data.error || data.message || 'Request failed')
+    const err = (data as { error?: unknown; message?: unknown }).error
+    const message =
+      typeof err === 'string'
+        ? err
+        : typeof (data as { message?: unknown }).message === 'string'
+          ? ((data as { message: string }).message)
+          : 'Request failed'
+    throw new Error(message)
   }
   return data as T
 }
@@ -89,10 +96,16 @@ export const api = {
       headers: { Authorization: `Bearer ${token}` },
     }),
   upsertProduct: (token: string, product: Partial<Product> & { name: string }, id?: string) =>
-    request(id ? `/products/${id}` : '/products', {
+    request<Product>(id ? `/products/${id}` : '/products', {
       method: id ? 'PUT' : 'POST',
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify(product),
+    }),
+  patchProduct: (token: string, id: string, patch: Partial<Product>) =>
+    request<Product>(`/products/${id}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(patch),
     }),
   deactivateProduct: (token: string, id: string) =>
     request(`/products/${id}`, {

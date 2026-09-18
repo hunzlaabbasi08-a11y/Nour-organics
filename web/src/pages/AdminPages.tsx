@@ -192,10 +192,78 @@ export function AdminOrdersPage() {
   )
 }
 
+type ProductDraft = {
+  id: string
+  name: string
+  tagline: string
+  description: string
+  weight: string
+  price: number
+  stock: number
+  image: string
+  benefitsText: string
+  badgesText: string
+  accent: string
+  active: boolean
+  isNew: boolean
+}
+
+const CATALOG_IMAGES = [
+  '/images/product-panjeeri.png',
+  '/images/product-energy.png',
+  '/images/product-kids.png',
+  '/images/panjeeri-product.png',
+  '/images/energy-product.png',
+  '/images/kids-product.png',
+]
+
+function splitList(value: string) {
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function toDraft(product?: Product): ProductDraft {
+  if (!product) {
+    return {
+      id: '',
+      name: '',
+      tagline: '',
+      description: '',
+      weight: '500 g',
+      price: 0,
+      stock: 100,
+      image: '/images/product-panjeeri.png',
+      benefitsText: '',
+      badgesText: '',
+      accent: 'gold',
+      active: true,
+      isNew: true,
+    }
+  }
+  return {
+    id: product.id,
+    name: product.name,
+    tagline: product.tagline,
+    description: product.description,
+    weight: product.weight,
+    price: product.price,
+    stock: product.stock ?? 100,
+    image: product.image,
+    benefitsText: (product.benefits || []).join(', '),
+    badgesText: (product.badges || []).join(', '),
+    accent: product.accent || 'gold',
+    active: product.active !== false,
+    isNew: false,
+  }
+}
+
 export function AdminProductsPage() {
   const token = getAdminToken()!
   const [products, setProducts] = useState<Product[]>([])
-  const [editing, setEditing] = useState<Product | null>(null)
+  const [draft, setDraft] = useState<ProductDraft | null>(null)
+  const [busy, setBusy] = useState(false)
 
   async function load() {
     setProducts(await api.adminProducts(token))
@@ -207,119 +275,275 @@ export function AdminProductsPage() {
 
   async function save(e: FormEvent) {
     e.preventDefault()
-    if (!editing) return
-    await api.upsertProduct(
-      token,
-      {
-        name: editing.name,
-        tagline: editing.tagline,
-        description: editing.description,
-        weight: editing.weight,
-        price: Number(editing.price),
-        currency: editing.currency || 'PKR',
-        image: editing.image,
-        benefits: editing.benefits,
-        badges: editing.badges,
-        accent: editing.accent,
-        stock: editing.stock ?? 100,
-        active: editing.active !== false,
-      },
-      editing.id,
-    )
-    notify('Product saved')
-    setEditing(null)
-    await load()
+    if (!draft) return
+    if (!draft.name.trim() || draft.price <= 0 || draft.description.trim().length < 2) {
+      notify('Name, description, and a price above 0 are required')
+      return
+    }
+
+    setBusy(true)
+    try {
+      const payload = {
+        id: draft.id.trim() || undefined,
+        name: draft.name.trim(),
+        tagline: draft.tagline.trim(),
+        description: draft.description.trim(),
+        weight: draft.weight.trim() || '500 g',
+        price: Number(draft.price),
+        currency: 'PKR',
+        image: draft.image.trim() || '/images/product-panjeeri.png',
+        benefits: splitList(draft.benefitsText),
+        badges: splitList(draft.badgesText),
+        accent: draft.accent || 'gold',
+        stock: Number(draft.stock) || 0,
+        active: draft.active,
+      }
+      await api.upsertProduct(token, payload, draft.isNew ? undefined : draft.id)
+      notify(draft.isNew ? 'Product added' : 'Product updated')
+      setDraft(null)
+      await load()
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Could not save product')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function patch(id: string, data: Partial<Product>, message: string) {
+    try {
+      await api.patchProduct(token, id, data)
+      notify(message)
+      await load()
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Could not update product')
+    }
   }
 
   return (
     <section>
-      <h1>Products</h1>
+      <div className="admin-toolbar">
+        <h1>Products</h1>
+        <button type="button" className="btn btn--gold" onClick={() => setDraft(toDraft())}>
+          Add product
+        </button>
+      </div>
+      <p className="admin-hint">
+        Price, stock, and visibility save to the database and show on the store immediately.
+      </p>
       <div className="admin-table-wrap">
         <table className="admin-table">
           <thead>
             <tr>
               <th>Name</th>
-              <th>Price</th>
+              <th>Price (PKR)</th>
               <th>Stock</th>
               <th>Active</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {products.map((p) => (
-              <tr key={p.id}>
-                <td>{p.name}</td>
-                <td>PKR {p.price.toLocaleString('en-PK')}</td>
-                <td>{p.stock ?? 0}</td>
-                <td>{p.active === false ? 'No' : 'Yes'}</td>
-                <td>
-                  <button type="button" className="btn btn--ghost" onClick={() => setEditing(p)}>
-                    Edit
-                  </button>
-                </td>
+            {products.length === 0 ? (
+              <tr>
+                <td colSpan={5}>No products yet. Add one to start the catalog.</td>
               </tr>
-            ))}
+            ) : (
+              products.map((p) => (
+                <tr key={p.id}>
+                  <td>{p.name}</td>
+                  <td>
+                    <input
+                      className="admin-inline-input"
+                      type="number"
+                      min={1}
+                      step={1}
+                      key={`${p.id}-price-${p.price}`}
+                      defaultValue={p.price}
+                      aria-label={`Price for ${p.name}`}
+                      onBlur={(e) => {
+                        const next = Number(e.target.value)
+                        if (!next || next === p.price) return
+                        void patch(p.id, { price: next }, 'Price updated')
+                      }}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      className="admin-inline-input"
+                      type="number"
+                      min={0}
+                      step={1}
+                      key={`${p.id}-stock-${p.stock ?? 0}`}
+                      defaultValue={p.stock ?? 0}
+                      aria-label={`Stock for ${p.name}`}
+                      onBlur={(e) => {
+                        const next = Number(e.target.value)
+                        if (Number.isNaN(next) || next === (p.stock ?? 0)) return
+                        void patch(p.id, { stock: next }, 'Stock updated')
+                      }}
+                    />
+                  </td>
+                  <td>{p.active === false ? 'Hidden' : 'Live'}</td>
+                  <td className="admin-row-actions">
+                    <button type="button" className="btn btn--ghost" onClick={() => setDraft(toDraft(p))}>
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--ghost"
+                      onClick={() =>
+                        patch(
+                          p.id,
+                          { active: p.active === false },
+                          p.active === false ? 'Product is live' : 'Product hidden from store',
+                        )
+                      }
+                    >
+                      {p.active === false ? 'Show' : 'Hide'}
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
 
-      {editing ? (
+      {draft ? (
         <form className="admin-product-form" onSubmit={save}>
-          <h2>Edit {editing.name}</h2>
+          <h2>{draft.isNew ? 'Add product' : `Edit ${draft.name}`}</h2>
+          {draft.isNew ? (
+            <label>
+              Product id (optional)
+              <input
+                value={draft.id}
+                placeholder="auto-from-name"
+                onChange={(e) => setDraft({ ...draft, id: e.target.value })}
+              />
+            </label>
+          ) : (
+            <p className="admin-hint">ID: {draft.id}</p>
+          )}
           <label>
             Name
             <input
-              value={editing.name}
-              onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+              value={draft.name}
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
               required
             />
           </label>
-          <label>
-            Price
-            <input
-              type="number"
-              value={editing.price}
-              onChange={(e) => setEditing({ ...editing, price: Number(e.target.value) })}
-              required
-            />
-          </label>
-          <label>
-            Stock
-            <input
-              type="number"
-              value={editing.stock ?? 0}
-              onChange={(e) => setEditing({ ...editing, stock: Number(e.target.value) })}
-              required
-            />
-          </label>
+          <div className="admin-form-grid">
+            <label>
+              Price (PKR)
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={draft.price || ''}
+                onChange={(e) => setDraft({ ...draft, price: Number(e.target.value) })}
+                required
+              />
+            </label>
+            <label>
+              Stock
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={draft.stock}
+                onChange={(e) => setDraft({ ...draft, stock: Number(e.target.value) })}
+                required
+              />
+            </label>
+            <label>
+              Weight
+              <input
+                value={draft.weight}
+                onChange={(e) => setDraft({ ...draft, weight: e.target.value })}
+              />
+            </label>
+            <label>
+              Accent
+              <select
+                value={draft.accent}
+                onChange={(e) => setDraft({ ...draft, accent: e.target.value })}
+              >
+                <option value="gold">Gold</option>
+                <option value="olive">Olive</option>
+                <option value="warm">Warm</option>
+              </select>
+            </label>
+          </div>
           <label>
             Tagline
             <input
-              value={editing.tagline}
-              onChange={(e) => setEditing({ ...editing, tagline: e.target.value })}
+              value={draft.tagline}
+              onChange={(e) => setDraft({ ...draft, tagline: e.target.value })}
             />
           </label>
           <label>
             Description
             <textarea
               rows={4}
-              value={editing.description}
-              onChange={(e) => setEditing({ ...editing, description: e.target.value })}
+              value={draft.description}
+              onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+              required
+            />
+          </label>
+          <label>
+            Image
+            <select
+              value={CATALOG_IMAGES.includes(draft.image) ? draft.image : '__custom'}
+              onChange={(e) => {
+                if (e.target.value === '__custom') return
+                setDraft({ ...draft, image: e.target.value })
+              }}
+            >
+              {CATALOG_IMAGES.map((src) => (
+                <option key={src} value={src}>
+                  {src.replace('/images/', '')}
+                </option>
+              ))}
+              <option value="__custom">Custom URL</option>
+            </select>
+          </label>
+          <label>
+            Image URL
+            <input
+              value={draft.image}
+              onChange={(e) => setDraft({ ...draft, image: e.target.value })}
+              required
+            />
+          </label>
+          {draft.image ? (
+            <img className="admin-image-preview" src={draft.image} alt="" />
+          ) : null}
+          <label>
+            Benefits (comma separated)
+            <input
+              value={draft.benefitsText}
+              onChange={(e) => setDraft({ ...draft, benefitsText: e.target.value })}
+            />
+          </label>
+          <label>
+            Badges (comma separated)
+            <input
+              value={draft.badgesText}
+              onChange={(e) => setDraft({ ...draft, badgesText: e.target.value })}
             />
           </label>
           <label className="admin-check">
             <input
               type="checkbox"
-              checked={editing.active !== false}
-              onChange={(e) => setEditing({ ...editing, active: e.target.checked })}
+              checked={draft.active}
+              onChange={(e) => setDraft({ ...draft, active: e.target.checked })}
             />
-            Active
+            Visible on store
           </label>
           <div className="admin-form-actions">
-            <button className="btn btn--gold" type="submit">
-              Save
+            <button className="btn btn--gold" type="submit" disabled={busy}>
+              {busy ? 'Saving…' : draft.isNew ? 'Add product' : 'Save changes'}
             </button>
-            <button className="btn btn--ghost" type="button" onClick={() => setEditing(null)}>
+            <button className="btn btn--ghost" type="button" onClick={() => setDraft(null)}>
               Cancel
             </button>
           </div>

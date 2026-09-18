@@ -153,7 +153,7 @@ export function Products({
       <div ref={headRef} className="section__head reveal">
         <p className="eyebrow">The Collection</p>
         <h2 className="section__title">
-          Three blends. <em>One standard of purity.</em>
+          Signature blends. <em>One standard of purity.</em>
         </h2>
         <p className="section__lede">
           Explore each jar through its product story, key benefits, and
