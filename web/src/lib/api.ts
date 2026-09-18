@@ -34,24 +34,33 @@ export type OrderPayload = {
 
 const API = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') || '/api'
 
+function errorMessage(data: unknown) {
+  if (!data || typeof data !== 'object') return 'Request failed'
+  const err = (data as { error?: unknown; message?: unknown }).error
+  if (typeof err === 'string') return err
+  if (err && typeof err === 'object' && 'fieldErrors' in err) {
+    const fields = Object.entries((err as { fieldErrors: Record<string, string[] | undefined> }).fieldErrors)
+      .flatMap(([key, messages]) => (messages || []).map((message) => `${key}: ${message}`))
+    if (fields.length) return fields.join('; ')
+  }
+  if (typeof (data as { message?: unknown }).message === 'string') {
+    return (data as { message: string }).message
+  }
+  return 'Request failed'
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const { headers: initHeaders, ...rest } = init || {}
   const res = await fetch(`${API}${path}`, {
+    ...rest,
     headers: {
       'Content-Type': 'application/json',
-      ...(init?.headers || {}),
+      ...(initHeaders || {}),
     },
-    ...init,
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    const err = (data as { error?: unknown; message?: unknown }).error
-    const message =
-      typeof err === 'string'
-        ? err
-        : typeof (data as { message?: unknown }).message === 'string'
-          ? ((data as { message: string }).message)
-          : 'Request failed'
-    throw new Error(message)
+    throw new Error(errorMessage(data))
   }
   return data as T
 }

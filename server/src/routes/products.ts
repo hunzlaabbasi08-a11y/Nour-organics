@@ -54,6 +54,14 @@ const productSchema = z.object({
   active: z.boolean().default(true),
 })
 
+function formatZodError(error: z.ZodError) {
+  const flat = error.flatten()
+  const fields = Object.entries(flat.fieldErrors).flatMap(([key, messages]) =>
+    (messages || []).map((message) => `${key}: ${message}`),
+  )
+  return [...flat.formErrors, ...fields].join('; ') || 'Invalid product data'
+}
+
 function isUniqueViolation(err: unknown) {
   return Boolean(err && typeof err === 'object' && 'code' in err && err.code === '23505')
 }
@@ -61,7 +69,7 @@ function isUniqueViolation(err: unknown) {
 productsRouter.post('/', requireAdmin, async (req, res) => {
   const parsed = productSchema.safeParse(req.body)
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.flatten() })
+    res.status(400).json({ error: formatZodError(parsed.error) })
     return
   }
 
@@ -111,7 +119,7 @@ productsRouter.post('/', requireAdmin, async (req, res) => {
 productsRouter.put('/:id', requireAdmin, async (req, res) => {
   const parsed = productSchema.safeParse(req.body)
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.flatten() })
+    res.status(400).json({ error: formatZodError(parsed.error) })
     return
   }
   const data = parsed.data
@@ -162,7 +170,7 @@ productsRouter.put('/:id', requireAdmin, async (req, res) => {
 productsRouter.patch('/:id', requireAdmin, async (req, res) => {
   const parsed = productSchema.partial().safeParse(req.body)
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.flatten() })
+    res.status(400).json({ error: formatZodError(parsed.error) })
     return
   }
 
