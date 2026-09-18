@@ -264,6 +264,13 @@ export function AdminProductsPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [draft, setDraft] = useState<ProductDraft | null>(null)
   const [busy, setBusy] = useState(false)
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [uploading, setUploading] = useState(false)
+
+  function openDraft(product?: Product) {
+    setPendingFile(null)
+    setDraft(toDraft(product))
+  }
 
   async function load() {
     setProducts(await api.adminProducts(token))
@@ -283,6 +290,12 @@ export function AdminProductsPage() {
 
     setBusy(true)
     try {
+      let image = draft.image.trim()
+      if (pendingFile) {
+        const uploaded = await api.uploadImage(token, pendingFile)
+        image = uploaded.url
+        setPendingFile(null)
+      }
       const payload = {
         id: draft.id.trim() || undefined,
         name: draft.name.trim(),
@@ -291,7 +304,7 @@ export function AdminProductsPage() {
         weight: draft.weight.trim() || '500 g',
         price: Number(draft.price),
         currency: 'PKR',
-        image: draft.image.trim() || '/images/product-panjeeri.png',
+        image: image || '/images/product-panjeeri.png',
         benefits: splitList(draft.benefitsText),
         badges: splitList(draft.badgesText),
         accent: draft.accent || 'gold',
@@ -301,6 +314,7 @@ export function AdminProductsPage() {
       await api.upsertProduct(token, payload, draft.isNew ? undefined : draft.id)
       notify(draft.isNew ? 'Product added' : 'Product updated')
       setDraft(null)
+      setPendingFile(null)
       await load()
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Could not save product')
@@ -319,11 +333,29 @@ export function AdminProductsPage() {
     }
   }
 
+  async function uploadImage() {
+    if (!draft || !pendingFile) {
+      notify('Choose an image first')
+      return
+    }
+    setUploading(true)
+    try {
+      const uploaded = await api.uploadImage(token, pendingFile)
+      setDraft({ ...draft, image: uploaded.url })
+      setPendingFile(null)
+      notify('Image uploaded')
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Could not upload image')
+    } finally {
+      setUploading(false)
+    }
+  }
+
   return (
     <section>
       <div className="admin-toolbar">
         <h1>Products</h1>
-        <button type="button" className="btn btn--gold" onClick={() => setDraft(toDraft())}>
+        <button type="button" className="btn btn--gold" onClick={() => openDraft()}>
           Add product
         </button>
       </div>
@@ -384,7 +416,7 @@ export function AdminProductsPage() {
                   </td>
                   <td>{p.active === false ? 'Hidden' : 'Live'}</td>
                   <td className="admin-row-actions">
-                    <button type="button" className="btn btn--ghost" onClick={() => setDraft(toDraft(p))}>
+                    <button type="button" className="btn btn--ghost" onClick={() => openDraft(p)}>
                       Edit
                     </button>
                     <button
@@ -489,34 +521,53 @@ export function AdminProductsPage() {
               required
             />
           </label>
-          <label>
-            Image
-            <select
-              value={CATALOG_IMAGES.includes(draft.image) ? draft.image : '__custom'}
-              onChange={(e) => {
-                if (e.target.value === '__custom') return
-                setDraft({ ...draft, image: e.target.value })
-              }}
+          <div className="admin-upload">
+            <p className="admin-upload__label">Product image</p>
+            {draft.image ? (
+              <img className="admin-image-preview" src={draft.image} alt="" />
+            ) : null}
+            <label className="admin-file">
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                onChange={(e) => setPendingFile(e.target.files?.[0] || null)}
+              />
+              <span>{pendingFile ? pendingFile.name : 'Choose image'}</span>
+            </label>
+            <button
+              className="btn btn--gold"
+              type="button"
+              disabled={!pendingFile || uploading}
+              onClick={() => void uploadImage()}
             >
-              {CATALOG_IMAGES.map((src) => (
-                <option key={src} value={src}>
-                  {src.replace('/images/', '')}
-                </option>
-              ))}
-              <option value="__custom">Custom URL</option>
-            </select>
-          </label>
-          <label>
-            Image URL
-            <input
-              value={draft.image}
-              onChange={(e) => setDraft({ ...draft, image: e.target.value })}
-              required
-            />
-          </label>
-          {draft.image ? (
-            <img className="admin-image-preview" src={draft.image} alt="" />
-          ) : null}
+              {uploading ? 'Uploading…' : 'Upload'}
+            </button>
+            <label>
+              Or image URL
+              <input
+                value={draft.image}
+                onChange={(e) => setDraft({ ...draft, image: e.target.value })}
+                placeholder="/images/product-panjeeri.png"
+              />
+            </label>
+            <label>
+              Existing photos
+              <select
+                value={CATALOG_IMAGES.includes(draft.image) ? draft.image : ''}
+                onChange={(e) => {
+                  if (!e.target.value) return
+                  setDraft({ ...draft, image: e.target.value })
+                }}
+              >
+                <option value="">Select a catalog photo</option>
+                {CATALOG_IMAGES.map((src) => (
+                  <option key={src} value={src}>
+                    {src.replace('/images/', '')}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <label>
             Benefits (comma separated)
             <input
@@ -543,7 +594,14 @@ export function AdminProductsPage() {
             <button className="btn btn--gold" type="submit" disabled={busy}>
               {busy ? 'Saving…' : draft.isNew ? 'Add product' : 'Save changes'}
             </button>
-            <button className="btn btn--ghost" type="button" onClick={() => setDraft(null)}>
+            <button
+              className="btn btn--ghost"
+              type="button"
+              onClick={() => {
+                setDraft(null)
+                setPendingFile(null)
+              }}
+            >
               Cancel
             </button>
           </div>

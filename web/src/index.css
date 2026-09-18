@@ -1920,6 +1920,36 @@ ul {
   border: 1px solid var(--line);
 }
 
+.admin-upload {
+  display: grid;
+  gap: 0.75rem;
+  border: 1px solid var(--line);
+  padding: 1rem;
+  background: var(--bg-lift);
+}
+
+.admin-upload__label {
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.admin-file {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+}
+
+.admin-file input[type='file'] {
+  color: var(--text-soft);
+  padding: 0.35rem 0;
+  border: 0;
+  background: transparent;
+}
+
 .admin-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

@@ -7,6 +7,7 @@ import cors from 'cors'
 import { productsRouter } from './routes/products.js'
 import { ordersRouter } from './routes/orders.js'
 import { adminRouter } from './routes/admin.js'
+import { uploadsRouter } from './routes/uploads.js'
 import { migrate } from './db/migrate.js'
 import { seedProducts } from './db/seed.js'
 
@@ -39,6 +40,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/products', productsRouter)
 app.use('/api/orders', ordersRouter)
 app.use('/api/admin', adminRouter)
+app.use('/api/uploads', uploadsRouter)
 app.use('/api', (_req, res) => {
   res.status(404).json({ error: 'Not found' })
 })

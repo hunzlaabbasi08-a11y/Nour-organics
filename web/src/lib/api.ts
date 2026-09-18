@@ -112,6 +112,21 @@ export const api = {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     }),
+  uploadImage: async (token: string, file: File) => {
+    const body = new FormData()
+    body.append('image', file)
+    const res = await fetch(`${API}/uploads`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body,
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      const err = (data as { error?: unknown }).error
+      throw new Error(typeof err === 'string' ? err : 'Upload failed')
+    }
+    return data as { id: number; url: string; filename: string }
+  },
 }
 
 export const brand = {
